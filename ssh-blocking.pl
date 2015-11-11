@@ -4,31 +4,38 @@ use warnings;
 use feature 'say';
 use IPC::Open3 'open3';
 use Symbol 'gensym';
+use Term::ANSIColor;
 
-my $host = shift @ARGV or die "usage: $0 <hostname>\n";
+## poor man's slurp
+my $script = do {
+    my $file = shift @ARGV or die "usage: $0 script hosts\n";
+    local $/;
+    open my $fh, "<", $file or die "Unable to open '$file': $!\n";
+    <$fh>
+};
 
-my ($stdin, $stdout, $stderr) = (undef, undef, gensym);
+my @hosts = <>;
+chomp @hosts;
 
-my $script = <<_SCRIPT_;
-date
-uptime
-ls -l no-such-file
-sleep 2
-_SCRIPT_
+for my $host (@hosts) {
+    my ($stdin, $stdout, $stderr) = (undef, undef, gensym);
 
-my $pid = open3($stdin, $stdout, $stderr, 'ssh', '-T', '-o', 'BatchMode=yes',
-                $host, 'sh');
-print $stdin $script;
-close $stdin;
+    my $pid = open3($stdin, $stdout, $stderr, 'ssh', '-T', '-o', 'BatchMode=yes',
+                    $host, 'sh');
+    print $stdin $script;
+    close $stdin;
 
-my @stdout = <$stdout>;
-my @stderr = <$stderr>;
-close $stdout;
-close $stderr;
+    my @stdout = <$stdout>;
+    my @stderr = <$stderr>;
+    close $stdout;
+    close $stderr;
 
-waitpid($pid, 0);
+    waitpid($pid, 0);
 
-say "STDOUT:\n@stdout";
-say "STDERR:\n@stderr";
+    print color('yellow bold'), sprintf "host: %-20s\n" => $host;
+    print color('reset'), color('green'), @stdout;
+    print color('reset'), color('red'),   @stderr;
+    print color('reset'), "\n";
+}
 
 exit;
